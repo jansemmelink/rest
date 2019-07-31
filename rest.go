@@ -20,7 +20,7 @@ var reservedParamNames = []string{"size"}
 func New() IApi {
 	return &api{
 		Router:    pat.New(),
-		itemStore: make(map[string]items.IStore),
+		itemStore: make(map[string]apiStore),
 	}
 }
 
@@ -34,7 +34,7 @@ type IApi interface {
 
 type api struct {
 	*pat.Router
-	itemStore map[string]items.IStore
+	itemStore map[string]apiStore
 }
 
 //Add an item to the REST-full API
@@ -47,24 +47,29 @@ func (a api) WithItem(store items.IStore) IApi {
 		panic(log.Wrapf(nil, "Add(%s) already exists", name))
 	}
 
-	a.itemStore[name] = store
+	apiStore := apiStore{store: store}
+	a.itemStore[name] = apiStore
 
 	//recreate the router to include all stores
 	a.Router = pat.New()
-	for name, store := range a.itemStore {
+	for name, apiStore := range a.itemStore {
 		//list with filter in GET|POST
-		a.Router.Get("/"+name+"s", func(res http.ResponseWriter, req *http.Request) { a.ListHandler(res, req, name, store) })
-		a.Router.Post("/"+name+"s", func(res http.ResponseWriter, req *http.Request) { a.ListHandler(res, req, name, store) })
+		a.Router.Get("/"+name+"s", apiStore.ListHandler)
+		a.Router.Post("/"+name+"s", apiStore.ListHandler)
 
 		//individual operations:
-		a.Router.Get("/"+name+"/new", func(res http.ResponseWriter, req *http.Request) { a.TmplHandler(res, req, name, store) })
-		a.Router.Get("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.GetHandler(res, req, name, store) })
-		a.Router.Put("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.UpdHandler(res, req, name, store) })
-		a.Router.Delete("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.DelHandler(res, req, name, store) })
-		a.Router.Post("/"+name, func(res http.ResponseWriter, req *http.Request) { a.AddHandler(res, req, name, store) })
+		a.Router.Get("/"+name+"/new", apiStore.TmplHandler)
+		a.Router.Get("/"+name+"/{id}", apiStore.GetHandler)
+		a.Router.Put("/"+name+"/{id}", apiStore.UpdHandler)
+		a.Router.Delete("/"+name+"/{id}", apiStore.DelHandler)
+		a.Router.Post("/"+name, apiStore.AddHandler)
 	}
 	a.Router.Get("/", a.UnknownHandler)
 	return a
+}
+
+type apiStore struct {
+	store items.IStore
 }
 
 type itemOperResult struct {
@@ -75,35 +80,35 @@ func (a api) UnknownHandler(res http.ResponseWriter, req *http.Request) {
 	http.Error(res, fmt.Sprintf("Unknown request %s %s", req.Method, req.URL.Path), http.StatusNotFound)
 } //api.UnknownHandler()
 
-func (a api) TmplHandler(res http.ResponseWriter, req *http.Request, name string, store items.IStore) {
+func (a apiStore) TmplHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(res, "Use HTTP method GET to retrieve the template item", http.StatusBadRequest)
 		return
 	}
 
-	log.Debugf("Tmpl %s", store.Name())
-	item := store.Tmpl()
+	log.Debugf("Tmpl %s", a.store.Name())
+	item := a.store.Tmpl()
 	itemJSON, _ := json.Marshal(item)
 	res.Write(itemJSON)
 	return
 } //api.TmplHandler()
 
-func (a api) AddHandler(res http.ResponseWriter, req *http.Request, name string, store items.IStore) {
+func (a apiStore) AddHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(res, "Use HTTP method POST to add a new item", http.StatusBadRequest)
 		return
 	}
 
-	log.Debugf("Add %s", store.Name())
-	newItem, err := a.BodyItem(req, store)
+	log.Debugf("Add %s", a.store.Name())
+	newItem, err := a.BodyItem(req)
 	if err != nil || newItem == nil {
-		reason := fmt.Sprintf("Cannot process %s data from request body %s", store.Name(), err)
+		reason := fmt.Sprintf("Cannot process %s data from request body %s", a.store.Name(), err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
-	id, err := store.Add(newItem)
+	id, err := a.store.Add(newItem)
 	if err != nil {
-		reason := fmt.Sprintf("Failed to add %s %s", store.Name(), err)
+		reason := fmt.Sprintf("Failed to add %s %s", a.store.Name(), err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
@@ -115,15 +120,15 @@ func (a api) AddHandler(res http.ResponseWriter, req *http.Request, name string,
 	return
 } //api.AddHandler()
 
-func (a api) GetHandler(res http.ResponseWriter, req *http.Request, name string, store items.IStore) {
+func (a apiStore) GetHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(res, "Use HTTP method GET to retrieve an item", http.StatusBadRequest)
 		return
 	}
 
 	id := req.URL.Query().Get(":id")
-	log.Debugf("Get %s.id=\"%s\"", name, id)
-	item, err := store.Get(id)
+	log.Debugf("Get %s.id=\"%s\"", a.store.Name(), id)
+	item, err := a.store.Get(id)
 	if err != nil {
 		log.Errorf("Cannot get id=%s %s", id, err)
 		http.Error(res, "cannot get id="+id, http.StatusNotFound)
@@ -134,24 +139,24 @@ func (a api) GetHandler(res http.ResponseWriter, req *http.Request, name string,
 	return
 } //api.GetHandler()
 
-func (a api) UpdHandler(res http.ResponseWriter, req *http.Request, name string, store items.IStore) {
+func (a apiStore) UpdHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPut {
 		http.Error(res, "Use HTTP method PUT to update an item", http.StatusBadRequest)
 		return
 	}
 
 	id := req.URL.Query().Get(":id")
-	log.Debugf("Upd %s.id=\"%s\"", name, id)
+	log.Debugf("Upd %s.id=\"%s\"", a.store.Name(), id)
 
-	updItem, err := a.BodyItem(req, store)
+	updItem, err := a.BodyItem(req)
 	if err != nil || updItem == nil {
-		reason := fmt.Sprintf("Cannot process %s data from request body %s", store.Name(), err)
+		reason := fmt.Sprintf("Cannot process %s data from request body %s", a.store.Name(), err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
-	err = store.Upd(id, updItem)
+	err = a.store.Upd(id, updItem)
 	if err != nil {
-		reason := fmt.Sprintf("Failed to update %s.id=%s %s", store.Name(), id, err)
+		reason := fmt.Sprintf("Failed to update %s.id=%s %s", a.store.Name(), id, err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
@@ -159,18 +164,18 @@ func (a api) UpdHandler(res http.ResponseWriter, req *http.Request, name string,
 	return
 } //api.UpdHandler()
 
-func (a api) DelHandler(res http.ResponseWriter, req *http.Request, name string, store items.IStore) {
+func (a apiStore) DelHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodDelete {
 		http.Error(res, "Use HTTP method DELETE to delete an item", http.StatusBadRequest)
 		return
 	}
 
 	id := req.URL.Query().Get(":id")
-	log.Debugf("Del %s.id=\"%s\"", name, id)
+	log.Debugf("Del %s.id=\"%s\"", a.store.Name(), id)
 
-	err := store.Del(id)
+	err := a.store.Del(id)
 	if err != nil {
-		reason := fmt.Sprintf("Failed to delete %s.id=%s %s", store.Name(), id, err)
+		reason := fmt.Sprintf("Failed to delete %s.id=%s %s", a.store.Name(), id, err)
 		http.Error(res, reason, http.StatusNotFound)
 		return
 	}
@@ -178,7 +183,7 @@ func (a api) DelHandler(res http.ResponseWriter, req *http.Request, name string,
 	return
 }
 
-func (a api) ListHandler(res http.ResponseWriter, req *http.Request, name string, store items.IStore) {
+func (a apiStore) ListHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodPost {
 		http.Error(res, "Use HTTP method GET or POST to retrieve the list", http.StatusBadRequest)
 		return
@@ -188,36 +193,36 @@ func (a api) ListHandler(res http.ResponseWriter, req *http.Request, name string
 	if err != nil {
 		size = 10
 	}
-	filterItem, err := a.BodyItem(req, store)
+	filterItem, err := a.BodyItem(req)
 	if err != nil {
-		reason := fmt.Sprintf("Cannot process %s filter from request %s", store.Name(), err)
+		reason := fmt.Sprintf("Cannot process %s filter from request %s", a.store.Name(), err)
 		http.Error(res, reason, http.StatusBadRequest)
 		return
 	}
 
-	itemList := store.Find(size, filterItem)
-	log.Debugf("List %s.{size=%d,filter=%v} -> %d: %v", store.Name(), size, filterItem, len(itemList), itemList)
+	itemList := a.store.Find(size, filterItem)
+	log.Debugf("List %s.{size=%d,filter=%v} -> %d: %v", a.store.Name(), size, filterItem, len(itemList), itemList)
 
 	jsonList, _ := json.Marshal(itemList)
 	res.Write(jsonList)
-} //api.ListHandler()
+} //apiStore.ListHandler()
 
 //BodyItem parses the request body as a store item
 //then apply any URL parameters on top of that, overwriting the body attributes
 //(it does not do validation because filter items do not have to be valid)
-func (a api) BodyItem(req *http.Request, store items.IStore) (items.IItem, error) {
+func (a apiStore) BodyItem(req *http.Request) (items.IItem, error) {
 	//create a new item in memory
-	itemDataPtrValue := reflect.New(store.Type())
+	itemDataPtrValue := reflect.New(a.store.Type())
 	itemDataPtr := itemDataPtrValue.Interface()
 	newItem, ok := itemDataPtr.(items.IItem)
 	if !ok {
-		return nil, log.Wrapf(nil, "failed to create new item from store.type=%v", store.Type())
+		return nil, log.Wrapf(nil, "failed to create new item from store.type=%v", a.store.Type())
 	}
 
 	//decode the (optional) request body into the item
 	err := json.NewDecoder(req.Body).Decode(itemDataPtr)
 	if err != nil && err != io.EOF {
-		return nil, log.Wrapf(err, "request body is not valid JSON data for %s", store.Name())
+		return nil, log.Wrapf(err, "request body is not valid JSON data for %s", a.store.Name())
 	}
 
 	// if err == nil {
@@ -225,7 +230,7 @@ func (a api) BodyItem(req *http.Request, store items.IStore) (items.IItem, error
 	// } //if read item from request body
 
 	//process URL parameters to overwrite item struct fields
-	structType := store.Type()
+	structType := a.store.Type()
 	if structType.Kind() == reflect.Ptr {
 		structType = structType.Elem()
 	}
