@@ -19,8 +19,8 @@ var reservedParamNames = []string{"size"}
 //New creates a blank API
 func New() IApi {
 	return &api{
-		Router: pat.New(),
-		items:  make(map[string]apiItem),
+		Router:    pat.New(),
+		itemStore: make(map[string]items.IStore),
 	}
 }
 
@@ -34,12 +34,7 @@ type IApi interface {
 
 type api struct {
 	*pat.Router
-	items map[string]apiItem
-}
-
-type apiItem struct {
-	name  string
-	store items.IStore
+	itemStore map[string]items.IStore
 }
 
 //Add an item to the REST-full API
@@ -48,20 +43,26 @@ func (a api) WithItem(store items.IStore) IApi {
 	if len(name) == 0 {
 		panic(log.Wrapf(nil, "Add() without a name"))
 	}
-	if _, ok := a.items[name]; ok {
+	if _, ok := a.itemStore[name]; ok {
 		panic(log.Wrapf(nil, "Add(%s) already exists", name))
 	}
-	//list with filter in GET|POST
-	a.Router.Get("/"+name+"s", func(res http.ResponseWriter, req *http.Request) { a.ListHandler(res, req, name, store) })
-	a.Router.Post("/"+name+"s", func(res http.ResponseWriter, req *http.Request) { a.ListHandler(res, req, name, store) })
 
-	//individual operations:
-	a.Router.Get("/"+name+"/new", func(res http.ResponseWriter, req *http.Request) { a.TmplHandler(res, req, name, store) })
-	a.Router.Get("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.GetHandler(res, req, name, store) })
-	a.Router.Put("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.UpdHandler(res, req, name, store) })
-	a.Router.Delete("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.DelHandler(res, req, name, store) })
-	a.Router.Post("/"+name, func(res http.ResponseWriter, req *http.Request) { a.AddHandler(res, req, name, store) })
+	a.itemStore[name] = store
 
+	//recreate the router to include all stores
+	a.Router = pat.New()
+	for name, store := range a.itemStore {
+		//list with filter in GET|POST
+		a.Router.Get("/"+name+"s", func(res http.ResponseWriter, req *http.Request) { a.ListHandler(res, req, name, store) })
+		a.Router.Post("/"+name+"s", func(res http.ResponseWriter, req *http.Request) { a.ListHandler(res, req, name, store) })
+
+		//individual operations:
+		a.Router.Get("/"+name+"/new", func(res http.ResponseWriter, req *http.Request) { a.TmplHandler(res, req, name, store) })
+		a.Router.Get("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.GetHandler(res, req, name, store) })
+		a.Router.Put("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.UpdHandler(res, req, name, store) })
+		a.Router.Delete("/"+name+"/{id}", func(res http.ResponseWriter, req *http.Request) { a.DelHandler(res, req, name, store) })
+		a.Router.Post("/"+name, func(res http.ResponseWriter, req *http.Request) { a.AddHandler(res, req, name, store) })
+	}
 	a.Router.Get("/", a.UnknownHandler)
 	return a
 }
