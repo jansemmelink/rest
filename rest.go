@@ -229,6 +229,7 @@ func (a api) BodyItem(req *http.Request, store items.IStore) (items.IItem, error
 		structType = structType.Elem()
 	}
 	if structType.Kind() == reflect.Struct {
+		log.Errorf("%v is struct", structType)
 		//see if this param is an store item JSON attribute
 		setParamCount := 0
 		for index := 0; index < structType.NumField(); index++ {
@@ -277,6 +278,8 @@ func (a api) BodyItem(req *http.Request, store items.IStore) (items.IItem, error
 		// if setParamCount > 0 {
 		// 	log.Debugf("Item after applying attrs: %T: %+v", itemDataPtr, itemDataPtr)
 		// }
+	} else {
+		log.Errorf("%v is not struct", structType)
 	} //if has struct type for store item
 	return newItem, nil
 }

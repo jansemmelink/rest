@@ -14,8 +14,12 @@ import (
 func main() {
 	log.DebugOn()
 	userStore := jsonfiles.MustNew("./share", "user", user{})
-	api := rest.New().WithItem(userStore)
-	http.ListenAndServe("localhost:8000", api)
+	vehicleStore := jsonfiles.MustNew("./share", "vehicle", &vehicle{})
+	api := rest.New().WithItem(userStore).WithItem(vehicleStore)
+	err := http.ListenAndServe("localhost:8000", api)
+	if err != nil {
+		panic(err)
+	}
 }
 
 type user struct {
@@ -48,6 +52,43 @@ func (u user) Match(filter items.IItem) error {
 		//look for sub-match of age
 		if u.Age != uf.Age {
 			return log.Wrapf(nil, "age mismatch(%d,%d)", u.Age, uf.Age)
+		}
+	}
+	return nil
+}
+
+type vehicle struct {
+	Manufacturer string `json:"manufacturer"`
+	Model        string `json:"model"`
+}
+
+//Validate ...
+func (v *vehicle) Validate() error {
+	if len(v.Manufacturer) == 0 {
+		return log.Wrapf(nil, "vehicle:{\"manufacturer\":\"...\"} not specified")
+	}
+	if len(v.Model) == 0 {
+		return log.Wrapf(nil, "vehicle:{\"model\":\"...\"} not specified")
+	}
+	return nil
+}
+
+func (v *vehicle) ID() string {
+	return v.Manufacturer + "_" + v.Model
+}
+
+func (v *vehicle) Match(filter items.IItem) error {
+	if filter != nil {
+		f := filter.(*vehicle)
+		if len(f.Manufacturer) > 0 {
+			if strings.Index(strings.ToUpper(v.Manufacturer), strings.ToUpper(f.Manufacturer)) == -1 {
+				return log.Wrapf(nil, "name mismatch (%s,%s)", v.Manufacturer, f.Manufacturer)
+			}
+		}
+		if len(f.Model) > 0 {
+			if strings.Index(strings.ToUpper(v.Model), strings.ToUpper(f.Model)) == -1 {
+				return log.Wrapf(nil, "name mismatch (%s,%s)", v.Model, f.Model)
+			}
 		}
 	}
 	return nil
