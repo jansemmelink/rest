@@ -229,7 +229,6 @@ func (a api) BodyItem(req *http.Request, store items.IStore) (items.IItem, error
 		structType = structType.Elem()
 	}
 	if structType.Kind() == reflect.Struct {
-		log.Errorf("%v is struct", structType)
 		//see if this param is an store item JSON attribute
 		setParamCount := 0
 		for index := 0; index < structType.NumField(); index++ {
