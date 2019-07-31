@@ -96,13 +96,13 @@ func (a api) AddHandler(res http.ResponseWriter, req *http.Request, name string,
 	log.Debugf("Add %s", store.Name())
 	newItem, err := a.BodyItem(req, store)
 	if err != nil || newItem == nil {
-		reason := fmt.Sprintf("Cannot process %s data from request body: %s", store.Name(), err)
+		reason := fmt.Sprintf("Cannot process %s data from request body %s", store.Name(), err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
 	id, err := store.Add(newItem)
 	if err != nil {
-		reason := fmt.Sprintf("Failed to add %s: %s", store.Name(), err)
+		reason := fmt.Sprintf("Failed to add %s %s", store.Name(), err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
@@ -124,7 +124,7 @@ func (a api) GetHandler(res http.ResponseWriter, req *http.Request, name string,
 	log.Debugf("Get %s.id=\"%s\"", name, id)
 	item, err := store.Get(id)
 	if err != nil {
-		log.Errorf("Cannot get id=%s: %s", id, err)
+		log.Errorf("Cannot get id=%s %s", id, err)
 		http.Error(res, "cannot get id="+id, http.StatusNotFound)
 		return
 	}
@@ -144,13 +144,13 @@ func (a api) UpdHandler(res http.ResponseWriter, req *http.Request, name string,
 
 	updItem, err := a.BodyItem(req, store)
 	if err != nil || updItem == nil {
-		reason := fmt.Sprintf("Cannot process %s data from request body: %s", store.Name(), err)
+		reason := fmt.Sprintf("Cannot process %s data from request body %s", store.Name(), err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
 	err = store.Upd(id, updItem)
 	if err != nil {
-		reason := fmt.Sprintf("Failed to update %s.id=%s: %s", store.Name(), id, err)
+		reason := fmt.Sprintf("Failed to update %s.id=%s %s", store.Name(), id, err)
 		http.Error(res, reason, http.StatusNotAcceptable)
 		return
 	}
@@ -169,7 +169,7 @@ func (a api) DelHandler(res http.ResponseWriter, req *http.Request, name string,
 
 	err := store.Del(id)
 	if err != nil {
-		reason := fmt.Sprintf("Failed to delete %s.id=%s: %s", store.Name(), id, err)
+		reason := fmt.Sprintf("Failed to delete %s.id=%s %s", store.Name(), id, err)
 		http.Error(res, reason, http.StatusNotFound)
 		return
 	}
@@ -189,7 +189,7 @@ func (a api) ListHandler(res http.ResponseWriter, req *http.Request, name string
 	}
 	filterItem, err := a.BodyItem(req, store)
 	if err != nil {
-		reason := fmt.Sprintf("Cannot process %s filter from request: %s", store.Name(), err)
+		reason := fmt.Sprintf("Cannot process %s filter from request %s", store.Name(), err)
 		http.Error(res, reason, http.StatusBadRequest)
 		return
 	}
