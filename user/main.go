@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	items "github.com/jansemmelink/items2"
+	"github.com/jansemmelink/items2/store/jsonfile"
 	"github.com/jansemmelink/items2/store/jsonfiles"
 	"github.com/jansemmelink/log"
 	"github.com/jansemmelink/rest"
@@ -13,9 +14,22 @@ import (
 
 func main() {
 	log.DebugOn()
+	api := rest.New()
+
+	//directories with JSON files:
 	userStore := jsonfiles.MustNew("./share", "user", user{})
+	api = api.WithItem(userStore)
+
 	vehicleStore := jsonfiles.MustNew("./share", "vehicle", &vehicle{})
-	api := rest.New().WithItem(userStore).WithItem(vehicleStore)
+	api = api.WithItem(vehicleStore)
+
+	//single JSON file:
+	serviceStore := jsonfile.MustNew("./conf/services.json", "service", service{})
+	api = api.WithItem(serviceStore)
+
+	routesStore := jsonfile.MustNew("./conf/routes.json", "route", route{})
+	api = api.WithItem(routesStore)
+
 	err := http.ListenAndServe("localhost:8000", api)
 	if err != nil {
 		panic(err)
@@ -88,6 +102,74 @@ func (v *vehicle) Match(filter items.IItem) error {
 		if len(f.Model) > 0 {
 			if strings.Index(strings.ToUpper(v.Model), strings.ToUpper(f.Model)) == -1 {
 				return log.Wrapf(nil, "name mismatch (%s,%s)", v.Model, f.Model)
+			}
+		}
+	}
+	return nil
+}
+
+type service struct {
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	Oper   string `json:"oper"`
+}
+
+//Validate ...
+func (v service) Validate() error {
+	if len(v.Name) == 0 {
+		return log.Wrapf(nil, "service:{\"name\":\"...\"} not specified")
+	}
+	if len(v.Domain) == 0 {
+		return log.Wrapf(nil, "service:{\"domain\":\"...\"} not specified")
+	}
+	if len(v.Oper) == 0 {
+		return log.Wrapf(nil, "service:{\"oper\":\"...\"} not specified")
+	}
+	return nil
+}
+
+func (v service) ID() string {
+	return v.Name
+}
+
+func (v service) Match(filter items.IItem) error {
+	if filter != nil {
+		f := filter.(*service)
+		if len(f.Name) > 0 {
+			if strings.Index(strings.ToUpper(v.Name), strings.ToUpper(f.Name)) == -1 {
+				return log.Wrapf(nil, "name mismatch (%s,%s)", v.Name, f.Name)
+			}
+		}
+	}
+	return nil
+}
+
+type route struct {
+	Name    string `json:"name"`
+	Service string `json:"service"`
+}
+
+//Validate ...
+func (r route) Validate() error {
+	if len(r.Name) == 0 {
+		return log.Wrapf(nil, "route:{\"name\":\"...\"} not specified")
+	}
+	if len(r.Service) == 0 {
+		return log.Wrapf(nil, "route:{\"service\":\"...\"} not specified")
+	}
+	return nil
+}
+
+func (r route) ID() string {
+	return r.Name
+}
+
+func (r route) Match(filter items.IItem) error {
+	if filter != nil {
+		f := filter.(*route)
+		if len(f.Name) > 0 {
+			if strings.Index(strings.ToUpper(r.Name), strings.ToUpper(f.Name)) == -1 {
+				return log.Wrapf(nil, "name mismatch (%s,%s)", r.Name, f.Name)
 			}
 		}
 	}
