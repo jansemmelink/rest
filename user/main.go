@@ -27,7 +27,7 @@ func main() {
 	serviceStore := jsonfile.MustNew("./conf/services.json", "service", service{})
 	api = api.WithItem(serviceStore)
 
-	routesStore := jsonfile.MustNew("./conf/routes.json", "route", route{})
+	routesStore := jsonfile.MustNew("./conf/routes.json", "route", &route{})
 	api = api.WithItem(routesStore)
 
 	err := http.ListenAndServe("localhost:8000", api)
@@ -150,13 +150,15 @@ type route struct {
 }
 
 //Validate ...
-func (r route) Validate() error {
+func (r *route) Validate() error {
 	if len(r.Name) == 0 {
 		return log.Wrapf(nil, "route:{\"name\":\"...\"} not specified")
 	}
 	if len(r.Service) == 0 {
-		return log.Wrapf(nil, "route:{\"service\":\"...\"} not specified")
+		//show we can update in Validate() with pointer receiver
+		r.Service = "123"
 	}
+	log.Debugf("Validated route:%+v", *r)
 	return nil
 }
 
