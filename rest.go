@@ -64,6 +64,8 @@ func (a api) WithItem(store items.IStore) IApi {
 		a.Router.Delete("/"+name+"/{id}", apiStore.DelHandler)
 		a.Router.Post("/"+name, apiStore.AddHandler)
 	}
+
+	a.Router.Options("/", a.CorsHandler)
 	a.Router.Get("/", a.UnknownHandler)
 	return a
 }
@@ -80,6 +82,23 @@ func (a api) UnknownHandler(res http.ResponseWriter, req *http.Request) {
 	http.Error(res, fmt.Sprintf("Unknown request %s %s", req.Method, req.URL.Path), http.StatusNotFound)
 } //api.UnknownHandler()
 
+func (a api) CorsHandler(res http.ResponseWriter, req *http.Request) {
+	log.Debugf("CorsHandler: %+v", *req)
+	res.Header().Set("Access-Control-Allow-Methods", "OPTIONS, POST, GET, PUT, DELETE")
+	res.Header().Set("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, Content-Length, Accept-Encoding")
+	origin := req.Header.Get("Origin")
+	res.Header().Set("Access-Control-Allow-Origin", origin)
+}
+
+// contentType is middleware that adds an application/json Content-Type header
+// to all outgoing responses.
+// func setContentType(h http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+// 		res.Header().Add("Content-Type", "application/json")
+// 		h.ServeHTTP(res, req)
+// 	})
+// } //setContentType
+
 func (a apiStore) TmplHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(res, "Use HTTP method GET to retrieve the template item", http.StatusBadRequest)
@@ -89,6 +108,10 @@ func (a apiStore) TmplHandler(res http.ResponseWriter, req *http.Request) {
 	log.Debugf("Tmpl %s", a.store.Name())
 	item := a.store.Tmpl()
 	itemJSON, _ := json.Marshal(item)
+	if origin := req.Header.Get("Origin"); len(origin) > 0 {
+		res.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	res.Header().Set("Content-Type", "application/json")
 	res.Write(itemJSON)
 	return
 } //api.TmplHandler()
@@ -116,6 +139,10 @@ func (a apiStore) AddHandler(res http.ResponseWriter, req *http.Request) {
 	//added - respond with new item id
 	result := itemOperResult{ID: id}
 	resultJSON, _ := json.Marshal(result)
+	if origin := req.Header.Get("Origin"); len(origin) > 0 {
+		res.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	res.Header().Set("Content-Type", "application/json")
 	res.Write(resultJSON)
 	return
 } //api.AddHandler()
@@ -135,6 +162,10 @@ func (a apiStore) GetHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	itemJSON, _ := json.Marshal(item)
+	if origin := req.Header.Get("Origin"); len(origin) > 0 {
+		res.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	res.Header().Set("Content-Type", "application/json")
 	res.Write(itemJSON)
 	return
 } //api.GetHandler()
@@ -202,8 +233,18 @@ func (a apiStore) ListHandler(res http.ResponseWriter, req *http.Request) {
 
 	itemList := a.store.Find(size, filterItem)
 	log.Debugf("List %s.{size=%d,filter=%v} -> %d: %v", a.store.Name(), size, filterItem, len(itemList), itemList)
+	//jsonList, _ := json.Marshal(itemList)
 
-	jsonList, _ := json.Marshal(itemList)
+	//convert map[<id>]IItem -> []IItem for real list output
+	arrayList := make([]interface{}, 0)
+	for _, v := range itemList {
+		arrayList = append(arrayList, v)
+	}
+	jsonList, _ := json.Marshal(arrayList)
+	if origin := req.Header.Get("Origin"); len(origin) > 0 {
+		res.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	res.Header().Set("Content-Type", "application/json")
 	res.Write(jsonList)
 } //apiStore.ListHandler()
 
