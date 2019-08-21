@@ -10,4 +10,3 @@ require (
 	github.com/jansemmelink/log v0.3.0
 )
 
-replace github.com/jansemmelink/items2 => ../items2
