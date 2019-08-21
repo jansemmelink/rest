@@ -233,19 +233,34 @@ func (a apiStore) ListHandler(res http.ResponseWriter, req *http.Request) {
 
 	itemList := a.store.Find(size, filterItem)
 	log.Debugf("List %s.{size=%d,filter=%v} -> %d: %v", a.store.Name(), size, filterItem, len(itemList), itemList)
-	//jsonList, _ := json.Marshal(itemList)
 
-	//convert map[<id>]IItem -> []IItem for real list output
-	arrayList := make([]interface{}, 0)
-	for _, v := range itemList {
-		arrayList = append(arrayList, v)
+	//stat JSON list buffer:
+	buf := append([]byte(nil), []byte("[")...)
+
+	//append each item in the list
+	for index, idAndItem := range itemList {
+		//add comma after previous item
+		if index > 0 {
+			buf = append(buf, []byte(",")...)
+		}
+
+		//start item with     {"_id":"...",
+		buf = append(buf, []byte(fmt.Sprintf("{\"_id\":\"%s\",", idAndItem.ID))...)
+
+		//encode the item as  {...}
+		jsonItem, _ := json.Marshal(idAndItem.Item)
+
+		//append the item, skipping the first "{"
+		buf = append(buf, jsonItem[1:]...)
 	}
-	jsonList, _ := json.Marshal(arrayList)
+
+	//end the JSON list:
+	buf = append(buf, []byte("]")...)
 	if origin := req.Header.Get("Origin"); len(origin) > 0 {
 		res.Header().Set("Access-Control-Allow-Origin", origin)
 	}
 	res.Header().Set("Content-Type", "application/json")
-	res.Write(jsonList)
+	res.Write(buf)
 } //apiStore.ListHandler()
 
 //BodyItem parses the request body as a store item
@@ -253,7 +268,7 @@ func (a apiStore) ListHandler(res http.ResponseWriter, req *http.Request) {
 //(it does not do validation because filter items do not have to be valid)
 func (a apiStore) BodyItem(req *http.Request) (items.IItem, error) {
 	//create a new item in memory
-	itemDataPtrValue := reflect.New(a.store.Type())
+	itemDataPtrValue := reflect.New(a.store.StructType())
 	itemDataPtr := itemDataPtrValue.Interface()
 	newItem, ok := itemDataPtr.(items.IItem)
 	if !ok {
