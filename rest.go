@@ -29,7 +29,8 @@ type IApi interface {
 	WithItem(store items.IStore) IApi
 	//With(otherAPI IApi) IApi
 
-	ServeHTTP(res http.ResponseWriter, req *http.Request)
+	ServeHTTP(res http.ResponseWriter, req *http.Request) //in api struct: inherited from pat.Router
+	AddToMux(*http.ServeMux)                              //use to merge with your existing http mux to have only one server port
 }
 
 type api struct {
@@ -69,6 +70,21 @@ func (a api) WithItem(store items.IStore) IApi {
 	a.Router.Get("/", a.UnknownHandler)
 	return a
 }
+
+//AddToMux ...
+func (a api) AddToMux(mux *http.ServeMux) {
+	for name, as := range a.itemStore {
+		log.Debugf("Adding to mux: name=%s", as.store.Name())
+		items := as.store.Find(10, nil)
+		for idx, i := range items {
+			log.Debugf("Item[%d]: %v", idx, i.ID)
+		}
+
+		mux.Handle("/"+name+"s", a)
+		mux.Handle("/"+name+"/", a)
+		mux.Handle("/"+name, a)
+	}
+} //api.AddToMux()
 
 type apiStore struct {
 	store items.IStore
@@ -147,13 +163,23 @@ func (a apiStore) AddHandler(res http.ResponseWriter, req *http.Request) {
 	return
 } //api.AddHandler()
 
+func (a apiStore) IDfromURL(req *http.Request) string {
+	//retrieve id from URL="/<name>/<id>"
+	prefix := "/" + a.store.Name() + "/"
+	if len(req.URL.Path) > len(prefix) {
+		return req.URL.Path[len(prefix):]
+	}
+	//for pat router, this works:
+	return req.URL.Query().Get(":id")
+}
+
 func (a apiStore) GetHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		http.Error(res, "Use HTTP method GET to retrieve an item", http.StatusBadRequest)
 		return
 	}
 
-	id := req.URL.Query().Get(":id")
+	id := a.IDfromURL(req)
 	log.Debugf("Get %s.id=\"%s\"", a.store.Name(), id)
 	item, err := a.store.Get(id)
 	if err != nil {
@@ -176,7 +202,7 @@ func (a apiStore) UpdHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	id := req.URL.Query().Get(":id")
+	id := a.IDfromURL(req)
 	log.Debugf("Upd %s.id=\"%s\"", a.store.Name(), id)
 
 	updItem, err := a.BodyItem(req)
@@ -201,7 +227,7 @@ func (a apiStore) DelHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	id := req.URL.Query().Get(":id")
+	id := a.IDfromURL(req)
 	log.Debugf("Del %s.id=\"%s\"", a.store.Name(), id)
 
 	err := a.store.Del(id)
