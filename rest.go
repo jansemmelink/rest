@@ -66,8 +66,10 @@ func (a api) WithItem(store items.IStore) IApi {
 		a.Router.Post("/"+name, apiStore.AddHandler)
 	}
 
-	a.Router.Options("/", a.CorsHandler)
-	a.Router.Get("/", a.UnknownHandler)
+	a.Router.Options("/"+name+"s", a.CorsHandler)
+	a.Router.Options("/"+name+"/", a.CorsHandler)
+	a.Router.Options("/"+name, a.CorsHandler)
+	//a.Router.Get("/", a.UnknownHandler)
 	return a
 }
 
