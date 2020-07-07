@@ -276,10 +276,14 @@ func (a apiStore) ListHandler(res http.ResponseWriter, req *http.Request) {
 		buf = append(buf, []byte(fmt.Sprintf("{\"_id\":\"%s\",", idAndItem.ID))...)
 
 		//encode the item as  {...}
-		jsonItem, _ := json.Marshal(idAndItem.Item)
-
-		//append the item, skipping the first "{"
-		buf = append(buf, jsonItem[1:]...)
+		jsonItem, err := json.Marshal(idAndItem.Item)
+		if err != nil {
+			log.Errorf("Failed to encode JSON: %v", err)
+		} else {
+			log.Debugf("Encode JSON: %v", string(jsonItem))
+			//append the item, skipping the first "{"
+			buf = append(buf, jsonItem[1:]...)
+		}
 	}
 
 	//end the JSON list:
